@@ -23,14 +23,17 @@ pearl-engineer/
 │       ├── config.py             # env vars, paths, defaults
 │       ├── describe.py           # vision-model descriptions
 │       ├── index.py              # embeddings + ChromaDB upserts
-│       └── search.py             # FastAPI app factory and models
+│       ├── search.py             # FastAPI app factory and models
+│       └── py.typed              # PEP 561 marker
 ├── tests/
 │   ├── test_describe.py
 │   ├── test_index.py
 │   └── test_search.py
 ├── .env.example
 ├── .gitignore
-├── pyproject.toml
+├── pyproject.toml                # package metadata + dependencies
+├── requirements.txt              # runtime deps for plain pip workflows
+├── requirements-dev.txt          # runtime + test/lint deps
 └── README.md
 ```
 
@@ -39,11 +42,22 @@ pearl-engineer/
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+
+# Option A (recommended): install the package and dev tools
 pip install -e ".[dev]"
+
+# Option B: plain requirements files
+pip install -r requirements-dev.txt
+pip install -e . --no-deps
 
 Copy-Item .env.example .env
 # then edit .env and set OPENAI_API_KEY
 ```
+
+`pyproject.toml` is the source of truth for package metadata and dependencies.
+`requirements.txt` and `requirements-dev.txt` mirror those lists for workflows
+that use plain `pip install -r ...`; keep them in sync if you change a version.
+
 
 The package loads `.env` from the working directory automatically. You can also
 set the key directly:
