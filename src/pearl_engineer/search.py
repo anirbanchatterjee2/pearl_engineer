@@ -33,6 +33,7 @@ from .categories import (
 from .config import (
     DEFAULT_COLLECTION,
     DEFAULT_EMBEDDING_MODEL,
+    DEFAULT_TENDERS_FILE,
     SearchSettings,
     require_api_key,
 )
@@ -52,6 +53,14 @@ from .service import (
     RetrievalError,
     SearchResult,
     SearchService,
+)
+from .tenders import (
+    DEFAULT_SOURCES,
+    TenderCrawler,
+    TenderRecord,
+    TenderStore,
+    get_sources,
+    summarize_tenders,
 )
 
 DEFAULT_N_RESULTS = 5
@@ -186,6 +195,90 @@ class UploadResponse(BaseModel):
     diagram: DiagramRecord
 
 
+class TenderItem(BaseModel):
+    """One gravity / water filter tender advertisement."""
+
+    id: str
+    title: str
+    buyer: str | None = None
+    tender_no: str | None = None
+    source_id: str = ""
+    source_name: str = ""
+    url: str = ""
+    publish_date: str | None = None
+    closing_date: str | None = None
+    location: str | None = None
+    value: str | None = None
+    quantity: str | None = None
+    description: str = ""
+    snippet: str = ""
+    keywords: list[str] = Field(default_factory=list)
+    discovered_at: str = ""
+    relevance: float = 0.0
+    status: str = "unknown"
+
+
+class TenderSourceInfo(BaseModel):
+    """One crawlable portal."""
+
+    id: str
+    name: str
+    kind: str
+    base_url: str
+    description: str
+
+
+class CrawlRequest(BaseModel):
+    """Body of ``POST /tenders/crawl``."""
+
+    queries: list[str] | None = Field(
+        None, description="Search queries; defaults to gravity-filter set."
+    )
+    source_ids: list[str] | None = Field(
+        None, description="Portal ids to crawl; defaults to all."
+    )
+    demo: bool = Field(
+        False, description="Seed realistic sample tenders without network."
+    )
+
+
+class CrawlResponse(BaseModel):
+    """Result of one crawler run plus the refreshed gist summary."""
+
+    fetched: int
+    found: int
+    new: int
+    updated: int
+    errors: list[str]
+    sources_tried: list[str]
+    queries: list[str]
+    demo: bool
+    summary: dict[str, Any]
+
+
+def _to_tender_item(record: TenderRecord) -> TenderItem:
+    return TenderItem(
+        id=record.id,
+        title=record.title,
+        buyer=record.buyer,
+        tender_no=record.tender_no,
+        source_id=record.source_id,
+        source_name=record.source_name,
+        url=record.url,
+        publish_date=record.publish_date,
+        closing_date=record.closing_date,
+        location=record.location,
+        value=record.value,
+        quantity=record.quantity,
+        description=record.description,
+        snippet=record.snippet,
+        keywords=list(record.keywords),
+        discovered_at=record.discovered_at,
+        relevance=record.relevance,
+        status=record.status,
+    )
+
+
 def _open_collection(client: Any, name: str) -> Any | None:
     """Return the existing collection, or None if it has not been built yet."""
     try:
@@ -285,14 +378,18 @@ def create_app(
     *,
     collection: Any = _UNSET,
     openai_client: Any = _UNSET,
+    tender_store: Any = _UNSET,
 ) -> FastAPI:
     """Build the FastAPI application.
 
     ``collection`` and ``openai_client`` are injection points for tests; when
     omitted, the lifespan opens ChromaDB and creates a real OpenAI client.
+    ``tender_store`` can be injected for tests; when omitted, a JSON-backed
+    :class:`TenderStore` at ``cfg.tenders_file`` is used.
     """
     cfg = settings or SearchSettings.from_env()
     cache_cfg = cfg.cache.normalised()
+    tenders_file = getattr(cfg, "tenders_file", DEFAULT_TENDERS_FILE)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -347,6 +444,10 @@ def create_app(
             vision_model=cfg.vision_model,
             max_upload_bytes=cfg.max_upload_bytes,
         )
+        app.state.tender_store = (
+            tender_store if tender_store is not _UNSET else TenderStore(tenders_file)
+        )
+        app.state.tender_crawler = TenderCrawler(app.state.tender_store)
         yield
 
     app = FastAPI(
@@ -403,10 +504,17 @@ def create_app(
             records = 0
             status = "degraded"
 
+        tender_count = 0
+        try:
+            tender_count = app.state.tender_store.count()
+        except Exception:  # tender store must never break health
+            logger.warning("health check could not count tenders", exc_info=True)
+
         return {
             "status": status,
             "collection": cfg.collection,
             "records": records,
+            "tenders": tender_count,
             "cache": service.cache_stats(),
         }
 
@@ -577,6 +685,88 @@ def create_app(
             raise HTTPException(status_code=404, detail="diagram not found")
         return FileResponse(path)
 
+    # ── Gravity / water filter tenders (defence) ────────────────────────
+
+    @app.get("/tenders/sources", response_model=list[TenderSourceInfo])
+    def list_tender_sources() -> list[TenderSourceInfo]:
+        """List the portals the tender crawler can crawl."""
+        return [
+            TenderSourceInfo(
+                id=source.id,
+                name=source.name,
+                kind=source.kind,
+                base_url=source.base_url,
+                description=source.description,
+            )
+            for source in DEFAULT_SOURCES
+        ]
+
+    @app.get("/tenders", response_model=list[TenderItem])
+    def list_tenders(
+        source: str | None = None,
+        buyer: str | None = None,
+        q: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[TenderItem]:
+        """List crawled gravity-filter tenders, soonest closing first."""
+        records = app.state.tender_store.list(
+            source=source or None,
+            buyer=buyer or None,
+            q=q or None,
+            status=status or None,
+            limit=max(1, min(limit, MAX_LIST_RESULTS)),
+        )
+        return [_to_tender_item(record) for record in records]
+
+    @app.get("/tenders/summary")
+    def tender_summary(q: str | None = None) -> dict[str, Any]:
+        """Gist summary: who is buying gravity filters, and by when."""
+        records = app.state.tender_store.list(limit=5000, q=q or None)
+        return summarize_tenders(records)
+
+    @app.get("/tenders/{tender_id}", response_model=TenderItem)
+    def get_tender(tender_id: str) -> TenderItem:
+        """Return one tender advertisement by id."""
+        record = app.state.tender_store.get(tender_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="tender not found")
+        return _to_tender_item(record)
+
+    @app.post("/tenders/crawl", response_model=CrawlResponse)
+    def crawl_tenders(
+        request: CrawlRequest | None = None,
+        x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+    ) -> CrawlResponse:
+        """Crawl defence portals for gravity-filter tenders and store them.
+
+        Live crawls require the admin token when ``PEARL_ADMIN_TOKEN`` is set
+        (demo seeding is allowed without it to make the UI usable offline).
+        """
+        body = request or CrawlRequest()
+        if not body.demo:
+            _require_admin(x_admin_token)
+        queries = [q.strip() for q in (body.queries or []) if q and q.strip()] or None
+        source_ids = [
+            s.strip() for s in (body.source_ids or []) if s and s.strip()
+        ] or None
+        crawler: TenderCrawler = app.state.tender_crawler
+        if source_ids:
+            crawler.sources = get_sources(source_ids)
+        report = crawler.crawl(queries=queries, source_ids=source_ids, demo=body.demo)
+        summary = summarize_tenders(app.state.tender_store.list(limit=5000))
+        return CrawlResponse(
+            fetched=report.fetched,
+            found=report.found,
+            new=report.new,
+            updated=report.updated,
+            errors=report.errors,
+            sources_tried=report.sources_tried,
+            queries=report.queries,
+            demo=report.demo,
+            summary=summary,
+        )
+
     if STATIC_DIR.is_dir():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -597,12 +787,16 @@ app = create_app()
 __all__ = [
     "CacheInfo",
     "CategoryInfo",
+    "CrawlRequest",
+    "CrawlResponse",
     "DEFAULT_COLLECTION",
     "DEFAULT_EMBEDDING_MODEL",
     "DiagramRecord",
     "SearchHit",
     "SearchRequest",
     "SearchResponse",
+    "TenderItem",
+    "TenderSourceInfo",
     "UploadResponse",
     "app",
     "create_app",

@@ -43,6 +43,11 @@
     uploading: false,
     previewUrl: null,
     toastTimer: null,
+    tenderSources: [],
+    tenders: [],
+    tenderSummary: null,
+    tenderSourcesLoaded: false,
+    crawling: false,
   };
 
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -56,6 +61,7 @@
     cacheElements();
     bindTabs();
     bindSearch();
+    bindTenders();
     bindUpload();
     bindDialog();
     bindKeyboardShortcuts();
@@ -64,6 +70,8 @@
     loadCategories();
     loadHealth();
     loadLibrary();
+    loadTenderSources();
+    loadTenders();
   }
 
   function cacheElements() {
@@ -116,6 +124,31 @@
     els.detailDescription = $("#detail-description");
     els.detailDownload = $("#detail-download");
     els.detailOpen = $("#detail-open");
+
+    els.tenderForm = $("#tender-form");
+    els.tenderQuery = $("#tender-query");
+    els.tenderSource = $("#tender-source");
+    els.tenderStatus = $("#tender-status");
+    els.tenderDemo = $("#tender-demo");
+    els.tenderCrawlButton = $("#tender-crawl-button");
+    els.tenderRefreshButton = $("#tender-refresh-button");
+    els.tenderFilterButton = $("#tender-filter-button");
+    els.gistHeadline = $("#gist-headline");
+    els.gistBody = $("#gist-body");
+    els.gistStats = $("#gist-stats");
+    els.gistUpdated = $("#gist-updated");
+    els.gistErrors = $("#gist-errors");
+    els.tenderCount = $("#tender-count");
+    els.tenderPortalCount = $("#tender-portal-count");
+    els.tendersGrid = $("#tenders-grid");
+    els.tenderDialog = $("#tender-dialog");
+    els.tenderClose = $("#tender-close");
+    els.tenderBadge = $("#tender-badge");
+    els.tenderTitle = $("#tender-title");
+    els.tenderMeta = $("#tender-meta");
+    els.tenderFacts = $("#tender-facts");
+    els.tenderDescription = $("#tender-description");
+    els.tenderOpen = $("#tender-open");
 
     els.toast = $("#toast");
   }
@@ -385,6 +418,303 @@
     } catch (error) {
       renderError("Could not load the library", error.message, () => loadLibrary(category));
     }
+  }
+
+  /* ── Tenders: gravity-filter advertisements ─────────────────────────── */
+
+  function bindTenders() {
+    els.tenderForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      loadTenders();
+    });
+    els.tenderCrawlButton.addEventListener("click", () => crawlTenders());
+    els.tenderRefreshButton.addEventListener("click", () => loadTenders());
+    els.tenderSource.addEventListener("change", () => loadTenders());
+    els.tenderStatus.addEventListener("change", () => loadTenders());
+    els.tendersGrid.addEventListener("click", (event) => {
+      const card = event.target.closest("[data-tender-index]");
+      if (!card) return;
+      const item = state.tenders[Number(card.dataset.tenderIndex)];
+      if (item) openTender(item);
+    });
+    els.tenderClose.addEventListener("click", () => els.tenderDialog.close());
+    els.tenderDialog.addEventListener("click", (event) => {
+      if (event.target === els.tenderDialog) els.tenderDialog.close();
+    });
+  }
+
+  async function loadTenderSources() {
+    try {
+      const sources = await api("/tenders/sources");
+      if (Array.isArray(sources) && sources.length) {
+        state.tenderSources = sources;
+        els.tenderSource.innerHTML =
+          `<option value="">All portals</option>` +
+          sources
+            .map(
+              (s) =>
+                `<option value="${escapeAttr(s.id)}">${escapeHtml(s.name)}</option>`,
+            )
+            .join("");
+        state.tenderSourcesLoaded = true;
+      }
+    } catch {
+      /* keep the single "All portals" option */
+    }
+  }
+
+  function tenderParams() {
+    const params = new URLSearchParams({ limit: "100" });
+    const source = els.tenderSource.value || "";
+    const status = els.tenderStatus.value || "";
+    const query = (els.tenderQuery.value || "").trim();
+    if (source) params.set("source", source);
+    if (status) params.set("status", status);
+    if (query) params.set("q", query);
+    return params;
+  }
+
+  function renderSkeletonsTenders(count) {
+    els.tendersGrid.innerHTML = Array.from(
+      { length: count },
+      () => `<div class="skeleton" aria-hidden="true"></div>`,
+    ).join("");
+  }
+
+  async function loadTenders() {
+    renderSkeletonsTenders(6);
+    els.tenderCount.textContent = "Loading gravity-filter advertisements…";
+    try {
+      const [records, summary] = await Promise.all([
+        api(`/tenders?${tenderParams().toString()}`),
+        api("/tenders/summary")
+          .catch(() => null),
+      ]);
+      state.tenders = Array.isArray(records) ? records : [];
+      state.tenderSummary = summary;
+      renderGist(summary);
+      renderTenders(state.tenders);
+      if (state.tenderSources.length) {
+        els.tenderPortalCount.textContent =
+          `Crawling ${state.tenderSources.length} portals · ` +
+          `${summary?.total ?? state.tenders.length} found`;
+      } else {
+        els.tenderPortalCount.textContent =
+          `${summary?.total ?? state.tenders.length} tender(s) in store`;
+      }
+      loadHealth();
+    } catch (error) {
+      els.tenderCount.textContent = "Could not load tenders.";
+      els.tendersGrid.innerHTML = `
+        <div class="state-card is-error">
+          <h3>Could not load tenders</h3>
+          <p>${escapeHtml(error.message || "Something went wrong.")}</p>
+          <button class="btn btn-ghost" type="button" id="tender-retry">Try again</button>
+        </div>`;
+      $("#tender-retry", els.tendersGrid)?.addEventListener("click", loadTenders);
+    }
+  }
+
+  function renderGist(summary) {
+    if (!summary) {
+      els.gistHeadline.textContent = "Gist unavailable";
+      els.gistBody.textContent = "The gist summary could not be loaded.";
+      els.gistStats.innerHTML = "";
+      return;
+    }
+    els.gistHeadline.textContent = summary.headline || "Tender gist";
+    els.gistBody.textContent = summary.gist || "";
+    els.gistUpdated.textContent = summary.generated_at
+      ? `Generated ${formatWhen(summary.generated_at)}`
+      : "—";
+    const stats = [
+      `<div class="gist-stat"><strong>${Number(summary.total) || 0}</strong><span>Found</span></div>`,
+      `<div class="gist-stat"><strong>${Number(summary.open) || 0}</strong><span>Open</span></div>`,
+      `<div class="gist-stat"><strong>${Number(summary.closed) || 0}</strong><span>Closed</span></div>`,
+      `<div class="gist-stat"><strong>${Object.keys(summary.by_source || {}).length}</strong><span>Portals</span></div>`,
+    ];
+    const buyers = summary.top_buyers || [];
+    const keywords = summary.top_keywords || [];
+    if (buyers.length) {
+      stats.push(
+        `<div class="gist-stat gist-stat-wide"><strong>${escapeHtml(buyers.slice(0, 3).join(", "))}</strong><span>Top buyers</span></div>`,
+      );
+    }
+    if (keywords.length) {
+      stats.push(
+        `<div class="gist-stat gist-stat-wide"><strong>${escapeHtml(keywords.slice(0, 4).join(" · "))}</strong><span>Requirements</span></div>`,
+      );
+    }
+    els.gistStats.innerHTML = stats.join("");
+  }
+
+  function renderTenders(items) {
+    if (!items.length) {
+      els.tenderCount.textContent = "No gravity-filter tenders match these filters.";
+      els.tendersGrid.innerHTML = `
+        <div class="state-card">
+          <span class="state-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.6"/>
+              <path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <h3>No advertisements yet</h3>
+          <p>Run a crawl to search GeM, CPPP/eProcure, DRDO, MES and MoD for
+             gravity-filter tenders, or try demo data to preview the page.</p>
+          <button class="btn btn-primary" type="button" id="tender-empty-crawl">Crawl demo data</button>
+        </div>`;
+      $("#tender-empty-crawl", els.tendersGrid)?.addEventListener("click", () => {
+        els.tenderDemo.checked = true;
+        crawlTenders();
+      });
+      return;
+    }
+    els.tenderCount.textContent =
+      `${items.length} advertisement${items.length === 1 ? "" : "s"} for gravity filters`;
+    els.tendersGrid.innerHTML = items.map((item, index) => renderTenderCard(item, index)).join("");
+  }
+
+  function renderTenderCard(item, index) {
+    const title = item.title || "Untitled tender";
+    const snippet = truncate(item.snippet || item.description || "No description captured.", 260);
+    const status = item.status || "unknown";
+    const due = item.closing_date ? `Closes ${item.closing_date}` : "Date TBA";
+    const relevance =
+      typeof item.relevance === "number" ? Math.round(Math.max(0, Math.min(1, item.relevance)) * 100) : null;
+    const url = item.url || "#";
+    return `
+      <article class="card tender-card" data-tender-index="${index}">
+        <div class="card-body tender-card-body">
+          <div class="tender-badges">
+            <span class="card-badge tender-badge-static" data-cat="tender">${escapeHtml(item.source_name || item.source_id || "Tender")}</span>
+            <span class="status-pill status-${escapeAttr(status)}">${escapeHtml(status)}</span>
+            <span class="muted tender-due">${escapeHtml(due)}</span>
+          </div>
+          <h3 class="card-title tender-title" title="${escapeAttr(title)}">${escapeHtml(title)}</h3>
+          <p class="card-description">${escapeHtml(snippet)}</p>
+          <div class="tender-facts">
+            <span><strong>Buyer</strong>${escapeHtml(item.buyer || "—")}</span>
+            <span><strong>Tender no.</strong>${escapeHtml(item.tender_no || "—")}</span>
+            <span><strong>Value</strong>${escapeHtml(item.value || "—")}</span>
+            <span><strong>Qty</strong>${escapeHtml(item.quantity || "—")}</span>
+            <span><strong>Location</strong>${escapeHtml(item.location || "—")}</span>
+          </div>
+          ${
+            relevance === null
+              ? ""
+              : `<div class="similarity" title="Relevance"><span>Relevance</span><div class="meter"><span style="width:${relevance}%"></span></div><strong>${relevance}%</strong></div>`
+          }
+          <div class="card-foot">
+            <span class="card-file" title="${escapeAttr(item.url || "")}">${escapeHtml(item.tender_no || item.source_id || "tender")}</span>
+            <div class="card-actions">
+              <button class="icon-btn" type="button" data-action="open" aria-label="View tender details">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" stroke="currentColor" stroke-width="1.6"/>
+                  <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/>
+                </svg>
+              </button>
+              <a class="icon-btn" href="${escapeAttr(url)}" target="_blank" rel="noopener" aria-label="Open on portal">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M14 4h6v6m0-6L10 14M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </a>
+            </div>
+          </div>
+        </div>
+      </article>`;
+  }
+
+  async function crawlTenders() {
+    if (state.crawling) return;
+    state.crawling = true;
+    const demo = Boolean(els.tenderDemo.checked);
+    setCrawlLoading(true);
+    try {
+      const body = { demo };
+      const source = els.tenderSource.value || "";
+      if (source && !demo) body.source_ids = [source];
+      const token = sessionStorage.getItem("pearl-admin-token") || "";
+      const result = await api("/tenders/crawl", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "X-Admin-Token": token } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+      if (result.summary) {
+        renderGist(result.summary);
+        state.tenderSummary = result.summary;
+      }
+      const message = demo
+        ? `Demo data loaded — ${result.found} sample tenders.`
+        : `Crawl complete: ${result.new} new, ${result.updated} updated, ${result.found} found.`;
+      showToast(message);
+      if (Array.isArray(result.errors) && result.errors.length && !demo) {
+        els.gistErrors.hidden = false;
+        els.gistErrors.textContent =
+          `Portal notes: ${result.errors.slice(0, 3).join(" · ")}`;
+      } else {
+        els.gistErrors.hidden = true;
+      }
+      await loadTenders();
+    } catch (error) {
+      showToast(error.message, true);
+      if (/admin token/i.test(error.message)) {
+        showToast("Live crawl needs the admin token — check Upload → Server access.", true);
+      }
+    } finally {
+      state.crawling = false;
+      setCrawlLoading(false);
+    }
+  }
+
+  function setCrawlLoading(loading) {
+    els.tenderCrawlButton.disabled = loading;
+    els.tenderCrawlButton.classList.toggle("is-loading", loading);
+    $(".btn-label", els.tenderCrawlButton).textContent = loading ? "Crawling…" : "Crawl portals";
+  }
+
+  function openTender(item) {
+    els.tenderBadge.textContent = item.source_name || "Tender";
+    els.tenderBadge.dataset.cat = "tender";
+    els.tenderTitle.textContent = item.title || "Untitled tender";
+    els.tenderMeta.textContent = [
+      item.tender_no || "no number",
+      item.buyer || "buyer n/a",
+      item.closing_date ? `closes ${item.closing_date}` : "date TBA",
+    ].join(" · ");
+    const facts = [
+      ["Status", item.status || "unknown"],
+      ["Published", item.publish_date || "—"],
+      ["Closing", item.closing_date || "—"],
+      ["Value", item.value || "—"],
+      ["Quantity", item.quantity || "—"],
+      ["Location", item.location || "—"],
+      ["Keywords", (item.keywords || []).join(", ") || "gravity filter"],
+    ];
+    els.tenderFacts.innerHTML = facts
+      .map(
+        ([k, v]) =>
+          `<span><strong>${escapeHtml(k)}</strong>${escapeHtml(v)}</span>`,
+      )
+      .join("");
+    els.tenderDescription.textContent =
+      item.description || item.snippet || "No description captured.";
+    els.tenderOpen.href = item.url || "#";
+    els.tenderOpen.hidden = !item.url;
+    if (typeof els.tenderDialog.showModal === "function") {
+      els.tenderDialog.showModal();
+    } else {
+      els.tenderDialog.setAttribute("open", "");
+    }
+  }
+
+  function formatWhen(value) {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return String(value);
+    return parsed.toLocaleString();
   }
 
   /* ── Result rendering ─────────────────────────────────────────────── */
@@ -747,6 +1077,9 @@
       }
       if (event.key.toLowerCase() === "u" && !typing && !event.metaKey && !event.ctrlKey) {
         switchView("upload");
+      }
+      if (event.key.toLowerCase() === "t" && !typing && !event.metaKey && !event.ctrlKey) {
+        switchView("tenders");
       }
     });
   }

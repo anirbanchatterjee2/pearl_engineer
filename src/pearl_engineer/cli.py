@@ -8,6 +8,7 @@ import os
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Any
 
 from . import __version__
 from .categories import load_category_map
@@ -224,6 +225,113 @@ def _add_ask_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_crawl_tenders_args(parser: argparse.ArgumentParser) -> None:
+    from .config import DEFAULT_TENDERS_FILE
+
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=DEFAULT_TENDERS_FILE,
+        help=f"tender store JSON file (default: {DEFAULT_TENDERS_FILE})",
+    )
+    parser.add_argument(
+        "--queries",
+        nargs="*",
+        default=None,
+        help="search queries (default: gravity-filter set)",
+    )
+    parser.add_argument(
+        "--sources",
+        nargs="*",
+        default=None,
+        help="portal ids to crawl (default: all — see tenders sources)",
+    )
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="seed realistic sample tenders without network access",
+    )
+    parser.add_argument(
+        "--list",
+        action="store_true",
+        help="only list stored tenders and print the gist summary",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="print machine-readable JSON instead of the human gist",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=12.0,
+        help="per-request timeout in seconds (default: 12)",
+    )
+
+
+def _cmd_crawl_tenders(args: argparse.Namespace) -> int:
+    """Crawl defence portals for gravity-filter tenders and print the gist."""
+    from .tenders import TenderCrawler, TenderStore, summarize_tenders
+
+    store = TenderStore(Path(args.output))
+    if not args.list:
+        crawler = TenderCrawler(store, timeout=args.timeout)
+        report = crawler.crawl(
+            queries=args.queries, source_ids=args.sources, demo=args.demo
+        )
+    else:
+        from .tenders import CrawlReport
+
+        report = CrawlReport()
+
+    records = store.list(limit=5000)
+    gist = summarize_tenders(records)
+
+    if args.json:
+        payload: dict[str, Any] = {
+            "report": report.to_dict(),
+            "summary": gist,
+            "tenders": [record.to_dict() for record in records[:100]],
+        }
+        print(json.dumps(payload, indent=2, default=str, ensure_ascii=False))
+        return 0
+
+    print(gist["headline"])
+    print(f"\n{gist['gist']}\n")
+    if not args.list:
+        print(
+            f"Crawled {report.fetched} page(s) across "
+            f"{len(report.sources_tried)} portal(s): "
+            f"{report.found} found, {report.new} new, {report.updated} updated."
+        )
+        if report.errors:
+            print("\nPortal errors (best-effort, run continues):")
+            for error in report.errors[:12]:
+                print(f"  - {error}")
+            if len(report.errors) > 12:
+                print(f"  ... and {len(report.errors) - 12} more")
+    if records:
+        print("\nAdvertisements for gravity filters (soonest closing first):")
+        for record in records[:25]:
+            due = f"closes {record.closing_date}" if record.closing_date else "date TBA"
+            print(
+                f"  - {record.title[:90]} | {record.buyer or 'buyer n/a'} "
+                f"| {due} | {record.source_name}"
+            )
+        if len(records) > 25:
+            print(f"  ... and {len(records) - 25} more in {args.output}")
+        print(
+            f"\nFull list stored in {args.output} — also served in the UI "
+            "under the 'Tender Ads' tab."
+        )
+    else:
+        print(
+            "No tenders stored yet. Try --demo for offline sample data, or "
+            "crawl without --list to search the portals."
+        )
+    return 0
+
+
 def _cmd_describe(args: argparse.Namespace) -> int:
     from .describe import describe_diagrams
 
@@ -409,6 +517,17 @@ def build_parser() -> argparse.ArgumentParser:
     _add_ask_args(ask)
     ask.set_defaults(func=_cmd_ask)
 
+    crawl = subparsers.add_parser(
+        "crawl-tenders",
+        help="crawl defence portals for gravity-filter tenders",
+        description=(
+            "Crawl GeM, CPPP/eProcure, DRDO, MES, MoD and aggregators for "
+            "gravity / water filter tenders, then print the gist summary."
+        ),
+    )
+    _add_crawl_tenders_args(crawl)
+    crawl.set_defaults(func=_cmd_crawl_tenders)
+
     return parser
 
 
@@ -468,4 +587,15 @@ def ask_main(argv: Sequence[str] | None = None) -> int:
     )
     _add_ask_args(parser)
     parser.set_defaults(func=_cmd_ask)
+    return _run(parser, argv)
+
+
+def crawl_tenders_main(argv: Sequence[str] | None = None) -> int:
+    """Entry point for the standalone ``pearl-crawl-tenders`` script."""
+    parser = argparse.ArgumentParser(
+        prog="pearl-crawl-tenders",
+        description="Crawl defence portals for gravity-filter tenders.",
+    )
+    _add_crawl_tenders_args(parser)
+    parser.set_defaults(func=_cmd_crawl_tenders)
     return _run(parser, argv)

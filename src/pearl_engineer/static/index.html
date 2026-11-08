@@ -44,6 +44,9 @@
         <button class="tab is-active" type="button" data-view="search" aria-selected="true">
           Search library
         </button>
+        <button class="tab" type="button" data-view="tenders" aria-selected="false">
+          Tender Ads
+        </button>
         <button class="tab" type="button" data-view="upload" aria-selected="false">
           Upload diagram
         </button>
@@ -132,6 +135,88 @@
           </div>
           <div class="results-grid" id="results" aria-live="polite"></div>
         </section>
+      </section>
+
+      <!-- ─────────────────────────── TENDERS ─────────────────────────── -->
+      <section class="view" id="view-tenders" aria-labelledby="tenders-heading" hidden>
+        <div class="hero">
+          <p class="eyebrow"><span class="eyebrow-line"></span> Defence tender crawler</p>
+          <h1 id="tenders-heading">
+            Gravity-filter tenders,<br />
+            <span class="gradient-text">across defence portals.</span>
+          </h1>
+          <p class="lede">
+            The crawler searches GeM, CPPP/eProcure, DRDO, MES, MoD and
+            aggregators for customers asking for gravity filters and water
+            filters in defence projects — then lists every advertisement with
+            a gist summary.
+          </p>
+        </div>
+
+        <div class="tender-shell">
+          <form class="tender-form" id="tender-form" role="search">
+            <div class="search-row">
+              <span class="search-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.7" />
+                  <path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+                </svg>
+              </span>
+              <input
+                id="tender-query"
+                name="tender-query"
+                type="search"
+                autocomplete="off"
+                placeholder="Filter tenders, e.g. DRDO or 5000 LPH…"
+                aria-label="Filter tenders"
+              />
+              <button class="btn btn-ghost" type="submit" id="tender-filter-button">
+                <span class="btn-label">Filter</span>
+              </button>
+            </div>
+            <div class="filter-row tender-actions">
+              <select id="tender-source" aria-label="Tender source">
+                <option value="">All portals</option>
+              </select>
+              <select id="tender-status" aria-label="Tender status">
+                <option value="">All statuses</option>
+                <option value="open">Open</option>
+                <option value="closed">Closed</option>
+                <option value="unknown">Date TBA</option>
+              </select>
+              <span class="tender-actions-right">
+                <label class="tender-demo">
+                  <input type="checkbox" id="tender-demo" />
+                  <span>Demo data</span>
+                </label>
+                <button class="btn btn-primary" type="button" id="tender-crawl-button">
+                  <span class="btn-label">Crawl portals</span>
+                </button>
+                <button class="btn btn-ghost" type="button" id="tender-refresh-button">
+                  <span class="btn-label">Refresh</span>
+                </button>
+              </span>
+            </div>
+          </form>
+
+          <div class="gist-card" id="gist-card" aria-live="polite">
+            <div class="gist-head">
+              <span class="badge badge-gist" data-cat="tender">Gist summary</span>
+              <span class="muted" id="gist-updated">—</span>
+            </div>
+            <h2 id="gist-headline">Loading gist…</h2>
+            <p id="gist-body">Searching the tender store for gravity-filter opportunities.</p>
+            <div class="gist-stats" id="gist-stats"></div>
+            <p class="muted gist-note" id="gist-errors" hidden></p>
+          </div>
+
+          <div class="tender-meta-row">
+            <span class="muted" id="tender-count">—</span>
+            <span class="muted" id="tender-portal-count">—</span>
+          </div>
+
+          <div class="results-grid" id="tenders-grid" aria-live="polite"></div>
+        </div>
       </section>
 
       <!-- ─────────────────────────── UPLOAD ─────────────────────────── -->
@@ -260,6 +345,22 @@
             <a class="btn btn-primary" id="detail-download" href="#" download>Download file</a>
             <a class="btn btn-ghost" id="detail-open" href="#" target="_blank" rel="noopener">Open original</a>
           </div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="detail-dialog tender-dialog" id="tender-dialog" aria-labelledby="tender-title">
+      <div class="dialog-body tender-dialog-body">
+        <button class="dialog-close" type="button" id="tender-close" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
+        </button>
+        <span class="badge" id="tender-badge">Tender</span>
+        <h2 id="tender-title">Tender title</h2>
+        <p class="dialog-file" id="tender-meta">—</p>
+        <div class="tender-facts" id="tender-facts"></div>
+        <div class="dialog-description" id="tender-description"></div>
+        <div class="dialog-actions">
+          <a class="btn btn-primary" id="tender-open" href="#" target="_blank" rel="noopener">View tender on portal</a>
         </div>
       </div>
     </dialog>

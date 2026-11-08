@@ -599,6 +599,39 @@ pip install -e ".[dev,enterprise]"
 pytest
 ```
 
+## Gravity-filter tender crawler
+
+The crawler finds customers asking for **gravity filters** and **water filters**
+in Indian defence projects. It searches multiple portals (GeM,
+CPPP/eProcure, DRDO, MES, Ministry of Defence and public aggregators),
+filters listings by gravity-filter relevance, stores unique tenders in
+`data/tenders.json`, and produces a **gist summary** (who is buying, what,
+and by when).
+
+```powershell
+pip install -e ".[crawl]"              # httpx + beautifulsoup4 (optional)
+pearl crawl-tenders                     # live crawl + gist summary (offline-safe)
+pearl crawl-tenders --demo              # seed realistic sample tenders, no network
+pearl crawl-tenders --list              # print stored tenders + gist without crawling
+pearl crawl-tenders --sources gem drdo  # crawl selected portals only
+pearl crawl-tenders --json              # machine-readable report + tenders
+```
+
+HTTP API (bundled UI tab **Tender Ads**, shortcut `T`):
+
+```powershell
+# GET /tenders?source=gem&q=DRDO  — list advertisements, soonest closing first
+# GET /tenders/summary             — gist headline + counts by portal/buyer
+# GET /tenders/sources             — crawlable portals
+# POST /tenders/crawl {"demo": true}  — seed demo data (no token needed)
+# POST /tenders/crawl {}              — live crawl (needs X-Admin-Token when set)
+```
+
+Live crawls are best-effort: each portal failure is recorded in the response
+and never blocks other portals. GeM/CPPP often require JavaScript or rate
+limits; the DuckDuckGo fallback and demo data keep the UI usable offline.
+Override the store with `PEARL_TENDERS_FILE`.
+
 ## Migrating from the old scripts
 
 | Old command | New command |

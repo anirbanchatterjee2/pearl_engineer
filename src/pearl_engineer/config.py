@@ -86,6 +86,9 @@ DEFAULT_CACHE_TTL_SECONDS = _env_float("PEARL_CACHE_TTL_SECONDS", 3600.0)
 DEFAULT_CACHE_MAX_ENTRIES = _env_int("PEARL_CACHE_MAX_ENTRIES", 1024)
 DEFAULT_ADMIN_TOKEN = _env_str("PEARL_ADMIN_TOKEN", "")
 DEFAULT_MAX_UPLOAD_BYTES = _env_int("PEARL_MAX_UPLOAD_BYTES", 20 * 1024 * 1024)
+DEFAULT_TENDERS_FILE = _env_path(
+    "PEARL_TENDERS_FILE", DEFAULT_DATA_DIR / "tenders.json"
+)
 
 
 @dataclass(frozen=True)
@@ -140,6 +143,7 @@ class SearchSettings:
     categories_file: Path = DEFAULT_CATEGORIES_FILE
     vision_model: str = DEFAULT_VISION_MODEL
     max_upload_bytes: int = DEFAULT_MAX_UPLOAD_BYTES
+    tenders_file: Path = DEFAULT_TENDERS_FILE
 
     @classmethod
     def from_env(cls) -> SearchSettings:
@@ -159,6 +163,21 @@ class SearchSettings:
             max_upload_bytes=_env_int(
                 "PEARL_MAX_UPLOAD_BYTES", DEFAULT_MAX_UPLOAD_BYTES
             ),
+            tenders_file=_env_path("PEARL_TENDERS_FILE", DEFAULT_TENDERS_FILE),
+        )
+
+
+@dataclass(frozen=True)
+class TenderSettings:
+    """Runtime settings for the tender crawler."""
+
+    tenders_file: Path = DEFAULT_TENDERS_FILE
+
+    @classmethod
+    def from_env(cls) -> TenderSettings:
+        """Build settings from the current environment."""
+        return cls(
+            tenders_file=_env_path("PEARL_TENDERS_FILE", DEFAULT_TENDERS_FILE),
         )
 
 
