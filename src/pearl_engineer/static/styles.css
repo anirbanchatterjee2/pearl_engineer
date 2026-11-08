@@ -157,9 +157,9 @@ img {
   width: 38px;
   height: 38px;
   color: var(--accent);
-  border: 1px solid rgba(244, 184, 96, 0.34);
+  border: 1px solid rgba(91, 126, 224, 0.38);
   border-radius: 11px;
-  background: rgba(244, 184, 96, 0.08);
+  background: rgba(91, 126, 224, 0.1);
 }
 
 .brand-mark svg {
