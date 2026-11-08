@@ -8,6 +8,11 @@ The core pipeline has three stages:
 2. **Index** those descriptions as embeddings in a local ChromaDB collection.
 3. **Search** the collection through a small FastAPI service.
 
+Diagrams can be ingested in bulk from the CLI or one at a time through the
+upload API and bundled web UI. Every record can carry a **category**
+(`mechanical`, `civil` or `computer_flow`) and an optional title, so search can
+be filtered and results can be labelled.
+
 A production retrieval layer sits on top of those stages:
 
 - a **two-tier semantic cache** (exact query matching plus embedding similarity),
@@ -22,10 +27,12 @@ A production retrieval layer sits on top of those stages:
 | --- | --- |
 | Semantic cache | Exact and cosine-similarity hits, TTL, LRU eviction, namespaces and hit-rate metrics |
 | Shared service | One retrieval implementation for HTTP, agents, chains and scripts |
+| Categories | Mechanical, civil and computer-flow diagrams with metadata filtering |
+| Upload & web UI | Admin-protected upload/describe/index endpoint and a bundled browser UI |
 | LangChain | `BaseRetriever` and `BaseTool` adapters with sync and async support |
 | LangGraph | Inspectable retrieve → refine → generate graph, optional checkpointer and ReAct agent |
 | Observability | `/health`, `/cache/stats`, cache headers and structured counters |
-| Safety | Configurable admin token for cache invalidation, bounded caches and clear error mapping |
+| Safety | Configurable admin token for cache invalidation and uploads, bounded caches, upload validation and clear error mapping |
 
 ## Architecture
 
@@ -40,8 +47,10 @@ A production retrieval layer sits on top of those stages:
      ┌───────▼────────┐              ┌──────────────────┐          ┌──────▼───────┐
      │  FastAPI       │              │  LangChain       │          │  LangGraph   │
      │  POST /search  │              │  retriever/tool  │          │  retrieve    │
-     │  /health       │              │  chains/agents   │          │  refine      │
-     │  /cache/*      │              │                  │          │  generate    │
+     │  /diagrams     │              │  chains/agents   │          │  refine      │
+     │  /categories   │              │                  │          │  generate    │
+     │  /health       │              │                  │          │              │
+     │  /cache/*      │              │                  │          │              │
      └───────┬────────┘              └──────────────────┘          └──────┬───────┘
              │                                                            │
              └───────────────────────────┬────────────────────────────────┘
@@ -61,6 +70,7 @@ pearl-engineer/
 │   └── .gitkeep
 ├── data/                           # generated artefacts (gitignored)
 │   ├── descriptions.json           # created by `pearl describe`
+│   ├── categories.json             # optional filename → category map
 │   └── chroma_db/                  # created by `pearl index`
 ├── src/
 │   └── pearl_engineer/
@@ -68,7 +78,9 @@ pearl-engineer/
 │       ├── __main__.py             # `python -m pearl_engineer`
 │       ├── cli.py                  # argparse commands + console scripts
 │       ├── config.py               # env vars, paths, cache settings
+│       ├── categories.py           # diagram categories and aliases
 │       ├── describe.py             # vision-model descriptions
+│       ├── ingest.py               # upload validation, describe + index
 │       ├── index.py                # embeddings + ChromaDB upserts
 │       ├── semantic_cache.py       # enterprise semantic cache
 │       ├── service.py              # shared retrieval service
@@ -77,6 +89,10 @@ pearl-engineer/
 │       │   ├── __init__.py
 │       │   ├── langchain.py        # retriever + tool adapters
 │       │   └── langgraph.py        # retrieval/generation graph
+│       ├── static/                 # bundled web UI
+│       │   ├── index.html
+│       │   ├── app.js
+│       │   └── styles.css
 │       └── py.typed                # PEP 561 marker
 ├── tests/
 │   ├── test_describe.py
@@ -84,6 +100,7 @@ pearl-engineer/
 │   ├── test_search.py
 │   ├── test_service.py
 │   ├── test_semantic_cache.py
+│   ├── test_upload.py
 │   ├── test_langchain_integration.py
 │   └── test_langgraph_integration.py
 ├── .env.example
@@ -159,6 +176,7 @@ Individual console scripts are provided too: `pearl-describe`, `pearl-index`,
 
 ```powershell
 pearl describe --diagrams-dir ./diagrams --output ./data/descriptions.json
+pearl describe --categories ./data/categories.json
 pearl describe --resume        # keep existing entries and skip those images
 pearl describe --fail-fast     # stop at the first API error
 pearl describe --model gpt-4o --max-tokens 6000
@@ -166,11 +184,36 @@ pearl describe --model gpt-4o --max-tokens 6000
 
 Results are saved after every image, so an interrupted run keeps its progress.
 
+### Diagram categories
+
+Categories are optional metadata stored on every indexed record:
+
+| ID | Label | Typical content |
+| --- | --- | --- |
+| `mechanical` | Mechanical | Parts, assemblies, tolerances, materials |
+| `civil` | Civil Engineering | Structural, site, utility and elevation drawings |
+| `computer_flow` | Computer Flow | Software architecture, data flow and process diagrams |
+
+Bulk ingestion reads an optional `data/categories.json` map from filename to
+category (aliases such as `flowchart` or `structural` are normalised):
+
+```json
+{
+  "orders.png": "computer_flow",
+  "bracket.png": "mechanical",
+  "site-plan.png": "civil"
+}
+```
+
+The category also selects the vision prompt used by `pearl describe`. Files
+without an entry are indexed as `uncategorized`.
+
 ### Index options
 
 ```powershell
 pearl index --dry-run          # show what would be indexed, no API calls
 pearl index --reset            # drop the collection and rebuild it
+pearl index --categories ./data/categories.json
 pearl index --batch-size 32 --max-chars 30000
 pearl index --collection diagrams --persist-dir ./data/chroma_db
 ```
@@ -211,9 +254,9 @@ The cache is implemented in `pearl_engineer.semantic_cache` and is wired into
 3. **Miss** — the service queries ChromaDB, stores the result under a namespace
    and returns it.
 
-Namespaces include the collection, embedding model and requested result count,
-so changing the model or asking for a different number of results cannot return
-an incompatible payload.
+Namespaces include the collection, embedding model, requested result count and
+any category filter, so changing the model, asking for a different number of
+results or switching category cannot return an incompatible payload.
 
 ### Production behaviour
 
@@ -264,10 +307,26 @@ pearl serve --cache-threshold 0.95 --cache-ttl 900 --cache-size 4096
 ## Search API
 
 ```powershell
-# POST /search
+# POST /search (optionally filtered by category)
 curl.exe -X POST http://127.0.0.1:8000/search `
   -H "Content-Type: application/json" `
-  -d '{"query": "how does the order service talk to billing?", "n_results": 5}'
+  -d '{"query": "how does the order service talk to billing?", "n_results": 5, "category": "computer_flow"}'
+
+# GET /categories
+curl.exe http://127.0.0.1:8000/categories
+
+# GET /diagrams?category=computer_flow
+curl.exe "http://127.0.0.1:8000/diagrams?category=computer_flow&limit=50"
+
+# POST /diagrams — upload, describe and index one image
+curl.exe -X POST http://127.0.0.1:8000/diagrams `
+  -H "X-Admin-Token: $env:PEARL_ADMIN_TOKEN" `
+  -F "file=@./diagrams/orders.png" `
+  -F "category=computer_flow" `
+  -F "title=Orders"
+
+# GET /diagrams/{filename} and /diagrams/{filename}/download
+curl.exe http://127.0.0.1:8000/diagrams/orders.png
 
 # GET /health
 curl.exe http://127.0.0.1:8000/health
@@ -283,6 +342,11 @@ curl.exe -X POST "http://127.0.0.1:8000/cache/clear?namespace=..." `
   -H "X-Admin-Token: $env:PEARL_ADMIN_TOKEN"
 ```
 
+The bundled web UI is served at `/` and talks to the same endpoints. Uploads
+are limited to PNG/JPEG files and `PEARL_MAX_UPLOAD_BYTES` (20 MB by default).
+When `PEARL_ADMIN_TOKEN` is set, both uploads and cache invalidation require the
+`X-Admin-Token` header.
+
 Example response:
 
 ```json
@@ -294,7 +358,12 @@ Example response:
       "image_path": "O:\\My Projects\\pearl-engineer\\diagrams\\orders.png",
       "image_file": "orders.png",
       "distance": 0.1823,
-      "similarity": 0.8177
+      "similarity": 0.8177,
+      "category": "computer_flow",
+      "category_label": "Computer Flow",
+      "title": "Orders",
+      "image_url": "/diagrams/orders.png",
+      "download_url": "/diagrams/orders.png/download"
     }
   ],
   "cache": {
@@ -324,9 +393,12 @@ Every `/search` response also carries cache diagnostics in headers:
 Error mapping:
 
 - `503` — collection missing or not built.
-- `502` — embedding provider failure.
+- `502` — embedding or vision provider failure.
 - `500` — ChromaDB query failure.
-- `401` — cache clear attempted without the configured admin token.
+- `401` — upload or cache clear attempted without the configured admin token.
+- `413` — upload exceeds the configured size limit.
+- `415` — upload is not a PNG/JPEG image.
+- `422` — empty upload, unknown category or invalid request body.
 
 ## LangChain integration
 
@@ -345,9 +417,7 @@ from openai import OpenAI
 from pearl_engineer.semantic_cache import SemanticCache
 from pearl_engineer.service import SearchService
 
-collection = (
-    chromadb.PersistentClient(path="data/chroma_db").get_collection("diagrams")
-)
+collection = chromadb.PersistentClient(path="data/chroma_db").get_collection("diagrams")
 service = SearchService(
     collection=collection,
     embedding_client=OpenAI(),
@@ -370,8 +440,9 @@ for document in documents:
 ```
 
 `DiagramRetriever` returns LangChain `Document` objects whose metadata contains
-`image_file`, `image_path`, `distance` and `similarity`. Async invocation is
-supported through `ainvoke`.
+`image_file`, `image_path`, `category`, `title`, `distance` and `similarity`
+plus any other ChromaDB metadata. Async invocation is supported through
+`ainvoke`.
 
 ### Tool
 
@@ -396,11 +467,13 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are an architecture assistant. Cite diagram filenames."),
-    ("human", "{input}"),
-    ("placeholder", "{agent_scratchpad}"),
-])
+prompt = ChatPromptTemplate.from_messages(
+    [
+        ("system", "You are an architecture assistant. Cite diagram filenames."),
+        ("human", "{input}"),
+        ("placeholder", "{agent_scratchpad}"),
+    ]
+)
 agent = create_tool_calling_agent(llm, [tool], prompt)
 executor = AgentExecutor(agent=agent, tools=[tool])
 print(executor.invoke({"input": "how does billing consume order events?"})["output"])
@@ -493,9 +566,10 @@ All settings are environment variables; the defaults are shown below.
 | Variable | Default | Used by |
 | --- | --- | --- |
 | `OPENAI_API_KEY` | — (required) | describe, index, serve, ask |
-| `PEARL_DIAGRAMS_DIR` | `diagrams` | describe, index |
+| `PEARL_DIAGRAMS_DIR` | `diagrams` | describe, index, serve (upload target) |
 | `PEARL_DATA_DIR` | `data` | base for generated files |
 | `PEARL_DESCRIPTIONS_FILE` | `data/descriptions.json` | describe, index |
+| `PEARL_CATEGORIES_FILE` | `data/categories.json` | describe, index, serve |
 | `CHROMA_PERSIST_DIR` | `data/chroma_db` | index, serve, ask |
 | `CHROMA_COLLECTION` | `diagrams` | index, serve, ask |
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | index, serve, ask |
@@ -505,7 +579,8 @@ All settings are environment variables; the defaults are shown below.
 | `PEARL_CACHE_SIMILARITY_THRESHOLD` | `0.92` | serve, ask |
 | `PEARL_CACHE_TTL_SECONDS` | `3600` | serve, ask |
 | `PEARL_CACHE_MAX_ENTRIES` | `1024` | serve, ask |
-| `PEARL_ADMIN_TOKEN` | empty | serve (`/cache/clear`) |
+| `PEARL_ADMIN_TOKEN` | empty | serve (`/cache/clear`, `POST /diagrams`) |
+| `PEARL_MAX_UPLOAD_BYTES` | `20971520` (20 MB) | serve (upload limit) |
 
 ## Development
 

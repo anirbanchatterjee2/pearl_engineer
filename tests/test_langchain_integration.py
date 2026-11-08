@@ -26,6 +26,14 @@ class FakeService:
                     image_file="orders.png",
                     distance=0.2,
                     similarity=0.8,
+                    metadata={
+                        "image_path": "C:/diagrams/orders.png",
+                        "image_file": "orders.png",
+                        "category": "computer_flow",
+                        "title": "Orders",
+                    },
+                    category="computer_flow",
+                    title="Orders",
                 )
             ]
         )
@@ -44,6 +52,8 @@ def test_retriever_returns_documents_with_metadata() -> None:
     assert len(documents) == 1
     assert documents[0].page_content == "Order service publishes to Kafka."
     assert documents[0].metadata["image_file"] == "orders.png"
+    assert documents[0].metadata["category"] == "computer_flow"
+    assert documents[0].metadata["title"] == "Orders"
     assert documents[0].metadata["similarity"] == pytest.approx(0.8)
     assert service.calls == [("kafka", 3)]
 

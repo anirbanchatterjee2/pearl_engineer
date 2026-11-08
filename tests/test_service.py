@@ -30,7 +30,16 @@ class FakeCollection:
         self.query_error = query_error
         self.query_result = query_result or {
             "documents": [["a diagram description"]],
-            "metadatas": [[{"image_path": "C:/diagrams/a.png", "image_file": "a.png"}]],
+            "metadatas": [
+                [
+                    {
+                        "image_path": "C:/diagrams/a.png",
+                        "image_file": "a.png",
+                        "category": "computer_flow",
+                        "title": "Orders",
+                    }
+                ]
+            ],
             "distances": [[0.25]],
         }
         self.query_calls: list[dict[str, Any]] = []
@@ -90,6 +99,9 @@ def test_search_returns_results_and_caches_them() -> None:
 
     assert len(first.results) == 1
     assert first.results[0].image_file == "a.png"
+    assert first.results[0].category == "computer_flow"
+    assert first.results[0].title == "Orders"
+    assert first.results[0].metadata["category"] == "computer_flow"
     assert first.results[0].similarity == pytest.approx(0.75)
     assert first.cache_hit is False
     assert second.cache_hit is True
@@ -183,3 +195,17 @@ def test_cache_stats_reports_hits() -> None:
     assert stats["entries"] == 1
     assert stats["hits"] == 1
     assert stats["misses"] == 1
+
+
+def test_query_embeddings_are_lists_when_cache_is_enabled() -> None:
+    # The cache stores vectors as tuples; ChromaDB rejects [tuple] input.
+    collection = FakeCollection()
+    service = make_service(collection, cache=SemanticCache())
+
+    service.search("kafka")
+
+    embeddings = collection.query_calls[0]["query_embeddings"]
+    assert isinstance(embeddings, list)
+    assert isinstance(embeddings[0], list)
+    assert all(isinstance(value, float) for value in embeddings[0])
+

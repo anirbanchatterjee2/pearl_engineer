@@ -7,6 +7,7 @@ caching, error handling and result parsing.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -181,13 +182,15 @@ class SearchService:
 
     def _query(
         self,
-        vector: list[float],
+        vector: Sequence[float],
         n_results: int,
         *,
         category: str | None = None,
     ) -> dict[str, Any]:
         kwargs: dict[str, Any] = {
-            "query_embeddings": [vector],
+            # The cache stores vectors as tuples; ChromaDB only accepts a list of
+            # floats (or numpy arrays), so normalise before querying.
+            "query_embeddings": [list(vector)],
             "n_results": n_results,
             "include": ["documents", "metadatas", "distances"],
         }

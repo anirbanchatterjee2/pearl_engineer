@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 from urllib.parse import quote
 
 from fastapi import (
@@ -39,8 +40,8 @@ from .ingest import (
     DiagramIngestor,
     EmptyUploadError,
     IngestError,
-    IngestResult,
     IngestionFailedError,
+    IngestResult,
     UnsupportedFileError,
     UploadTooLargeError,
 )
@@ -128,12 +129,16 @@ class CacheInfo(BaseModel):
 class SearchHit(BaseModel):
     """One matching diagram."""
 
-    description: str = Field(..., description="Stored description of the matching diagram.")
+    description: str = Field(
+        ..., description="Stored description of the matching diagram."
+    )
     image_path: str = Field(
         ..., description="Absolute path to the image file, from metadata."
     )
     image_file: str | None = Field(None, description="Image filename, from metadata.")
-    distance: float | None = Field(None, description="Cosine distance; lower is closer.")
+    distance: float | None = Field(
+        None, description="Cosine distance; lower is closer."
+    )
     similarity: float | None = Field(
         None, description="1 - distance for cosine collections."
     )
@@ -255,7 +260,7 @@ def _records_from_get(raw: dict[str, Any]) -> list[DiagramRecord]:
     documents = raw.get("documents") or []
     metadatas = raw.get("metadatas") or []
     records: list[DiagramRecord] = []
-    for image_id, document, metadata in zip(ids, documents, metadatas):
+    for image_id, document, metadata in zip(ids, documents, metadatas, strict=False):
         metadata = metadata or {}
         image_file = str(metadata.get("image_file") or image_id)
         title = metadata.get("title")
@@ -269,7 +274,9 @@ def _records_from_get(raw: dict[str, Any]) -> list[DiagramRecord]:
                 indexed_at=metadata.get("indexed_at"),
             )
         )
-    records.sort(key=lambda record: (record.indexed_at or "", record.image_file), reverse=True)
+    records.sort(
+        key=lambda record: (record.indexed_at or "", record.image_file), reverse=True
+    )
     return records
 
 

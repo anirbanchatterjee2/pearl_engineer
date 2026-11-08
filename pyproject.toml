@@ -62,3 +62,8 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI declares dependencies with calls (``File(...)``, ``Form(...)``) in
+# parameter defaults, which B008 would otherwise flag.
+"src/pearl_engineer/search.py" = ["B008"]

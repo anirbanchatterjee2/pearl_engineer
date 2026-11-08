@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Pearl Engineer — semantic search and upload for mechanical, civil and computer-flow diagrams."
+    />
+    <title>Pearl Engineer · Diagram Library</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="blueprint-grid" aria-hidden="true"></div>
+    <div class="ambient ambient-one" aria-hidden="true"></div>
+    <div class="ambient ambient-two" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Pearl Engineer home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none">
+            <path d="M16 2.5 29 9.75v12.5L16 29.5 3 22.25V9.75L16 2.5Z" stroke="currentColor" stroke-width="1.5" />
+            <path d="M16 9.5 23 13.5v7L16 24.5 9 20.5v-7L16 9.5Z" fill="currentColor" opacity=".18" />
+            <circle cx="16" cy="16" r="2.25" fill="currentColor" />
+          </svg>
+        </span>
+        <span class="brand-copy"><strong>Pearl</strong> Engineer</span>
+      </a>
+
+      <nav class="tabs" aria-label="Primary">
+        <button class="tab is-active" type="button" data-view="search" aria-selected="true">
+          Search library
+        </button>
+        <button class="tab" type="button" data-view="upload" aria-selected="false">
+          Upload diagram
+        </button>
+      </nav>
+
+      <div class="status" id="status" title="Backend status">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text">Connecting…</span>
+      </div>
+    </header>
+
+    <main>
+      <!-- ─────────────────────────── SEARCH ─────────────────────────── -->
+      <section class="view is-active" id="view-search" aria-labelledby="search-heading">
+        <div class="hero">
+          <p class="eyebrow"><span class="eyebrow-line"></span> Semantic diagram retrieval</p>
+          <h1 id="search-heading">
+            Find the drawing you need.<br />
+            <span class="gradient-text">Describe it in plain English.</span>
+          </h1>
+          <p class="lede">
+            Search mechanical, civil and computer-flow diagrams by what they show —
+            then preview and download the original file.
+          </p>
+        </div>
+
+        <form class="search-shell" id="search-form" role="search">
+          <label class="sr-only" for="search-input">Search diagrams</label>
+          <div class="search-row">
+            <span class="search-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.7" />
+                <path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+              </svg>
+            </span>
+            <input
+              id="search-input"
+              name="query"
+              type="search"
+              autocomplete="off"
+              placeholder="e.g. gearbox assembly with bearing tolerances"
+              aria-describedby="search-hint"
+            />
+            <button class="btn btn-primary" type="submit" id="search-button">
+              <span class="btn-label">Search</span>
+            </button>
+          </div>
+
+          <div class="filter-row">
+            <span class="filter-label">Filter</span>
+            <div class="chips" id="category-chips" role="group" aria-label="Diagram category">
+              <button class="chip is-active" type="button" data-category="" aria-pressed="true">
+                All diagrams
+              </button>
+            </div>
+            <label class="select-wrap" for="n-results">
+              <span>Show</span>
+              <select id="n-results">
+                <option value="6">6</option>
+                <option value="12" selected>12</option>
+                <option value="24">24</option>
+                <option value="50">50</option>
+              </select>
+            </label>
+          </div>
+          <p class="sr-only" id="search-hint">Press Enter to search. Use the filter chips to narrow by diagram type.</p>
+        </form>
+
+        <div class="suggestions" id="suggestions" aria-label="Example searches">
+          <span class="suggestions-label">Try</span>
+          <button type="button" data-query="exploded view of a gearbox assembly">gearbox assembly</button>
+          <button type="button" data-query="site plan with drainage and road levels">site drainage plan</button>
+          <button type="button" data-query="data flow diagram with authentication service">authentication flow</button>
+          <button type="button" data-query="foundation detail with reinforcement and dimensions">foundation detail</button>
+        </div>
+
+        <section class="results-section" aria-labelledby="results-heading">
+          <div class="section-head">
+            <div>
+              <h2 id="results-heading">Library</h2>
+              <p class="muted" id="results-meta">Loading indexed diagrams…</p>
+            </div>
+            <button class="btn btn-ghost" type="button" id="reset-search" hidden>
+              Clear search
+            </button>
+          </div>
+          <div class="results-grid" id="results" aria-live="polite"></div>
+        </section>
+      </section>
+
+      <!-- ─────────────────────────── UPLOAD ─────────────────────────── -->
+      <section class="view" id="view-upload" aria-labelledby="upload-heading" hidden>
+        <div class="upload-layout">
+          <div class="upload-copy">
+            <p class="eyebrow"><span class="eyebrow-line"></span> Add to the library</p>
+            <h1 id="upload-heading">
+              Upload a diagram.<br />
+              <span class="gradient-text">Make it searchable.</span>
+            </h1>
+            <p class="lede">
+              Pick the drawing family, drop in a PNG or JPEG, and Pearl will write a
+              detailed description, embed it, and add it to the search index.
+            </p>
+
+            <ol class="steps">
+              <li>
+                <span class="step-number">01</span>
+                <div><strong>Choose the diagram type</strong><span>Mechanical, civil engineering, or computer flow.</span></div>
+              </li>
+              <li>
+                <span class="step-number">02</span>
+                <div><strong>Upload the image</strong><span>PNG or JPEG, up to 20 MB.</span></div>
+              </li>
+              <li>
+                <span class="step-number">03</span>
+                <div><strong>Search and download</strong><span>It is instantly available in the library.</span></div>
+              </li>
+            </ol>
+          </div>
+
+          <div class="upload-card">
+            <form id="upload-form" novalidate>
+              <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Choose a diagram image">
+                <input id="file-input" type="file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" hidden />
+                <div class="dropzone-empty" id="dropzone-empty">
+                  <span class="drop-icon" aria-hidden="true">
+                    <svg viewBox="0 0 32 32" fill="none">
+                      <path d="M16 21V7m0 0-5 5m5-5 5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+                      <path d="M6 20v3.5A2.5 2.5 0 0 0 8.5 26h15a2.5 2.5 0 0 0 2.5-2.5V20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+                    </svg>
+                  </span>
+                  <strong>Drop your diagram here</strong>
+                  <span>or <button type="button" class="link" id="browse-btn">browse files</button></span>
+                  <small>PNG or JPEG · up to 20 MB</small>
+                </div>
+                <div class="dropzone-preview" id="dropzone-preview" hidden>
+                  <img id="preview-img" alt="Selected diagram preview" />
+                  <div class="preview-meta">
+                    <strong id="preview-name">diagram.png</strong>
+                    <span id="preview-size">0 KB</span>
+                    <button type="button" class="link" id="clear-file">Choose a different file</button>
+                  </div>
+                </div>
+              </div>
+
+              <fieldset class="category-fieldset">
+                <legend>Diagram type</legend>
+                <div class="category-options" id="upload-categories"></div>
+              </fieldset>
+
+              <label class="field" for="upload-title">
+                <span>Title <em>optional</em></span>
+                <input id="upload-title" maxlength="120" placeholder="e.g. Gearbox assembly — revision C" />
+              </label>
+
+              <details class="advanced">
+                <summary>Server access</summary>
+                <label class="field" for="admin-token">
+                  <span>Admin token <em>only if configured</em></span>
+                  <input id="admin-token" type="password" autocomplete="off" placeholder="X-Admin-Token" />
+                </label>
+              </details>
+
+              <button class="btn btn-primary btn-block" type="submit" id="upload-submit" disabled>
+                <span class="btn-label">Upload &amp; index</span>
+              </button>
+              <p class="form-note" id="upload-note">A vision model will generate the searchable description.</p>
+            </form>
+
+            <div class="upload-success" id="upload-success" hidden>
+              <span class="success-mark" aria-hidden="true">
+                <svg viewBox="0 0 32 32" fill="none">
+                  <circle cx="16" cy="16" r="13" stroke="currentColor" stroke-width="1.6" />
+                  <path d="m10 16.5 4 4 8-9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+              <h3>Indexed and ready</h3>
+              <p id="success-copy">Your diagram is now part of the library.</p>
+              <img id="success-image" alt="" hidden />
+              <div class="success-actions">
+                <button class="btn btn-primary" type="button" id="search-new">Search it now</button>
+                <button class="btn btn-ghost" type="button" id="upload-another">Upload another</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>Pearl Engineer · semantic diagram library</span>
+      <span class="footer-mono" id="footer-records">—</span>
+    </footer>
+
+    <dialog class="detail-dialog" id="detail-dialog" aria-labelledby="detail-title">
+      <div class="dialog-grid">
+        <div class="dialog-media">
+          <img id="detail-image" alt="" />
+        </div>
+        <div class="dialog-body">
+          <button class="dialog-close" type="button" id="detail-close" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
+          </button>
+          <span class="badge" id="detail-category">Diagram</span>
+          <h2 id="detail-title">Diagram title</h2>
+          <p class="dialog-file" id="detail-file">file.png</p>
+          <div class="similarity-line" id="detail-similarity-wrap">
+            <span>Match</span>
+            <div class="meter"><span id="detail-similarity-bar"></span></div>
+            <strong id="detail-similarity">—</strong>
+          </div>
+          <div class="dialog-description" id="detail-description"></div>
+          <div class="dialog-actions">
+            <a class="btn btn-primary" id="detail-download" href="#" download>Download file</a>
+            <a class="btn btn-ghost" id="detail-open" href="#" target="_blank" rel="noopener">Open original</a>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

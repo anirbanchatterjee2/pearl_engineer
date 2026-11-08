@@ -24,6 +24,14 @@ def make_result(name: str = "orders.png") -> SearchResult:
         image_file=name,
         distance=0.2,
         similarity=0.8,
+        metadata={
+            "image_path": f"C:/diagrams/{name}",
+            "image_file": name,
+            "category": "computer_flow",
+            "title": "Orders",
+        },
+        category="computer_flow",
+        title="Orders",
     )
 
 
@@ -65,6 +73,8 @@ def test_graph_returns_deterministic_answer_without_llm() -> None:
     assert "orders.png" in result["answer"]
     assert "Order service publishes to Kafka." in result["answer"]
     assert result["sources"][0]["image_file"] == "orders.png"
+    assert result["sources"][0]["category"] == "computer_flow"
+    assert result["sources"][0]["title"] == "Orders"
     assert service.calls == [("how are orders published?", 5)]
 
 
