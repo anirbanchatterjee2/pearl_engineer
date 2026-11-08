@@ -16,13 +16,14 @@ from __future__ import annotations
 import json
 import sys
 import time
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
-import chromadb
 from openai import OpenAI, OpenAIError
 
+from .categories import UNCATEGORIZED, normalize_category
 from .config import (
     DEFAULT_CHROMA_DIR,
     DEFAULT_COLLECTION,
@@ -132,7 +133,9 @@ def index_descriptions(
     max_chars: int = DEFAULT_MAX_CHARS,
     reset: bool = False,
     dry_run: bool = False,
+    categories: dict[str, str] | None = None,
     client: Any | None = None,
+    chroma_client: Any | None = None,
 ) -> int:
     """Embed descriptions and upsert them into ChromaDB.
 
@@ -180,7 +183,12 @@ def index_descriptions(
         require_api_key()
         client = OpenAI(max_retries=5, timeout=120.0)
 
-    chroma = chromadb.PersistentClient(path=str(persist_dir))
+    if chroma_client is None:
+        import chromadb
+
+        chroma = chromadb.PersistentClient(path=str(persist_dir))
+    else:
+        chroma = chroma_client
 
     if reset:
         try:
@@ -215,11 +223,13 @@ def index_descriptions(
             # built from the truncated body, since that is all the model accepts.
             documents.append(descriptions[name])
             bodies.append(body)
+            category = normalize_category((categories or {}).get(name)) or UNCATEGORIZED
             metadatas.append(
                 {
                     # The payload that makes a vector answerable: where the image lives.
                     "image_path": str(image_paths[name]),
                     "image_file": name,
+                    "category": category,
                     "image_exists": image_paths[name].is_file(),
                     "description_chars": len(descriptions[name]),
                     "embedding_model": model,

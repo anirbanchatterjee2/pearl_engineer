@@ -45,6 +45,58 @@ Use plain text with short labelled sections and bullet lines. Be complete rather
 concise; include details even if they look minor. If something is illegible, say \
 "[illegible]" rather than guessing."""
 
+MECHANICAL_PROMPT = """You are analysing a mechanical engineering drawing or schematic. \
+Describe it exhaustively as a single detailed text report so that it can be understood \
+without seeing the image.
+
+Cover, in this order:
+1. Drawing type and title block: title, drawing number, revision, scale, units, material \
+and any notes written in the title block.
+2. Views: orthographic, isometric, section, detail and auxiliary views, their labels and \
+what each view shows.
+3. Components and features: every part, assembly, hole, slot, boss, rib, thread, gear, \
+bearing, fastener, spring or weld shown. Give labels, part numbers and apparent function.
+4. Dimensions and annotations: transcribe every dimension, tolerance, datum, surface \
+finish, thread callout, weld symbol, material specification and note verbatim.
+5. Relationships and motion: assembly hierarchy, mating parts, fits, clearances, \
+fasteners, exploded-view order, axes of rotation and any implied motion.
+6. Inferred behaviour: briefly state what the part or assembly appears to do. Mark all \
+inference clearly as inferred.
+
+Use plain text with short labelled sections and bullet lines. Be complete rather than \
+concise. If something is illegible, say "[illegible]" rather than guessing."""
+
+CIVIL_PROMPT = """You are analysing a civil engineering or architectural drawing. Describe \
+it exhaustively as a single detailed text report so that it can be understood without \
+seeing the image.
+
+Cover, in this order:
+1. Drawing type and title block: plan, elevation, section, site plan, structural detail or \
+utility drawing; title, sheet number, revision, scale, north arrow and units.
+2. Elements: every site boundary, road, path, building, foundation, column, beam, slab, \
+wall, stair, ramp, drain, pipe, utility line, landscape feature and annotation shown. Give \
+labels and apparent function.
+3. Dimensions and levels: transcribe every dimension, grid line, level, elevation, slope, \
+section marker, material callout, reinforcement note and specification verbatim.
+4. Structure and relationships: grouping, levels, grid references, connection details, \
+cross-references to other sheets and any sequence or hierarchy.
+5. Inferred behaviour: briefly state what the site or structure appears to be for. Mark all \
+inference clearly as inferred.
+
+Use plain text with short labelled sections and bullet lines. Be complete rather than \
+concise. If something is illegible, say "[illegible]" rather than guessing."""
+
+CATEGORY_PROMPTS: dict[str, str] = {
+    "mechanical": MECHANICAL_PROMPT,
+    "civil": CIVIL_PROMPT,
+    "computer_flow": PROMPT,
+}
+
+
+def prompt_for_category(category: str | None) -> str:
+    """Return the vision prompt best suited to ``category``."""
+    return CATEGORY_PROMPTS.get(category or "", PROMPT)
+
 
 def encode_image(path: Path) -> str:
     """Return a ``data:`` URL containing the base64-encoded image."""
@@ -62,6 +114,7 @@ def describe_image(
     path: Path,
     model: str = DEFAULT_VISION_MODEL,
     max_tokens: int = DEFAULT_MAX_TOKENS,
+    prompt: str | None = None,
 ) -> str:
     """Ask the model to describe one diagram and return its text."""
     data_url = encode_image(path)
@@ -71,7 +124,7 @@ def describe_image(
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": PROMPT},
+                    {"type": "text", "text": prompt or PROMPT},
                     {
                         "type": "image_url",
                         "image_url": {"url": data_url, "detail": "high"},
@@ -136,6 +189,7 @@ def describe_diagrams(
     max_tokens: int = DEFAULT_MAX_TOKENS,
     resume: bool = False,
     fail_fast: bool = False,
+    categories: dict[str, str] | None = None,
     client: Any | None = None,
 ) -> int:
     """Describe every image in ``diagrams_dir`` and write the results to ``output``.
@@ -177,8 +231,15 @@ def describe_diagrams(
 
         print(f"[{index}/{total}] {name}: describing...", end="", flush=True)
         t0 = time.monotonic()
+        category = (categories or {}).get(name)
         try:
-            results[name] = describe_image(client, path, model, max_tokens)
+            results[name] = describe_image(
+                client,
+                path,
+                model,
+                max_tokens,
+                prompt=prompt_for_category(category),
+            )
         except (OpenAIError, ValueError, OSError) as exc:
             print(f" failed ({exc})")
             failures.append((name, str(exc)))

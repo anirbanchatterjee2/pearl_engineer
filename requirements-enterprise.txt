@@ -1,0 +1,7 @@
+# Everything needed for the enterprise retrieval stack.
+# Mirrors [project.optional-dependencies].enterprise.
+-r requirements.txt
+
+langchain-core>=0.3
+langchain-openai>=0.3
+langgraph>=0.2
