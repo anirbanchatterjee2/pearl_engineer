@@ -40,6 +40,10 @@ direction, the label on the connector (protocol, payload, operation, e.g. "HTTPS
 layers and any implied sequence or hierarchy.
 5. Inferred behaviour: briefly state what the system appears to do end to end. Mark all \
 inference clearly as inferred.
+6. Fact sheet: finish with a section titled "FACTS" listing the most important numeric \
+facts as short "label: value" lines (e.g. "Kafka partitions: 6", "Instances: 3", "Port: \
+8443"). Include every count, port, version, rate, limit or size stated anywhere on the \
+diagram, and label each fact with the component it belongs to.
 
 Use plain text with short labelled sections and bullet lines. Be complete rather than \
 concise; include details even if they look minor. If something is illegible, say \
@@ -62,6 +66,12 @@ finish, thread callout, weld symbol, material specification and note verbatim.
 fasteners, exploded-view order, axes of rotation and any implied motion.
 6. Inferred behaviour: briefly state what the part or assembly appears to do. Mark all \
 inference clearly as inferred.
+7. Fact sheet: finish with a section titled "FACTS" listing the most important \
+numeric facts as short "label: value" lines (e.g. "Shaft diameter: 42 mm", "Number of \
+teeth: 24", "Torque rating: 320 Nm"). Include every dimension, tolerance, count, rate, \
+pressure, speed or material grade stated on the drawing. A searcher may look for this \
+drawing purely by quoting one of these facts, so omitting a fact makes the drawing \
+unfindable.
 
 Use plain text with short labelled sections and bullet lines. Be complete rather than \
 concise. If something is illegible, say "[illegible]" rather than guessing."""
@@ -77,11 +87,19 @@ utility drawing; title, sheet number, revision, scale, north arrow and units.
 wall, stair, ramp, drain, pipe, utility line, landscape feature and annotation shown. Give \
 labels and apparent function.
 3. Dimensions and levels: transcribe every dimension, grid line, level, elevation, slope, \
-section marker, material callout, reinforcement note and specification verbatim.
+section marker, material callout, reinforcement note and specification verbatim. State
+quantities exactly as written (e.g. "WELL DEPTH OF 30 FEET", "2 structures"), never rounded
+or paraphrased.
 4. Structure and relationships: grouping, levels, grid references, connection details, \
 cross-references to other sheets and any sequence or hierarchy.
 5. Inferred behaviour: briefly state what the site or structure appears to be for. Mark all \
 inference clearly as inferred.
+6. Fact sheet: finish with a section titled "FACTS" listing the most important \
+numeric facts as short "label: value" lines (e.g. "Well depth: 30 feet", "Number of \
+structures: 2", "Site area: 1.2 hectares"). Include every count, depth, length, width, \
+area, capacity, rate, pressure or level stated on the drawing. A searcher may look for \
+this drawing purely by quoting one of these facts, so omitting a fact makes the drawing \
+unfindable.
 
 Use plain text with short labelled sections and bullet lines. Be complete rather than \
 concise. If something is illegible, say "[illegible]" rather than guessing."""
