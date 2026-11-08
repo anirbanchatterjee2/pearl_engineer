@@ -1,0 +1,6 @@
+# Development dependencies. Mirrors [project.optional-dependencies].dev.
+-r requirements.txt
+
+httpx>=0.27
+pytest>=8.0
+ruff>=0.5
