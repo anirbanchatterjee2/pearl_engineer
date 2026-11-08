@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pearl-engineer"
+version = "1.0.0"
+description = "Describe architecture diagrams with vision models, index them in ChromaDB, and search them semantically."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "chromadb>=0.5",
+    "fastapi>=0.110",
+    "openai>=1.40",
+    "pydantic>=2.6",
+    "python-dotenv>=1.0",
+    "uvicorn[standard]>=0.29",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx>=0.27",
+    "pytest>=8.0",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+pearl = "pearl_engineer.cli:main"
+pearl-describe = "pearl_engineer.cli:describe_main"
+pearl-index = "pearl_engineer.cli:index_main"
+pearl-serve = "pearl_engineer.cli:serve_main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pearl_engineer"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
