@@ -1,0 +1,4 @@
+# Optional crawler dependencies for gravity-filter tender search.
+# Mirrors [project.optional-dependencies].crawl.
+httpx>=0.27
+beautifulsoup4>=4.12

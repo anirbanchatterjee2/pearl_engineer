@@ -118,17 +118,11 @@ def test_get_collection_falls_back_to_legacy_metadata() -> None:
     assert client.calls[1]["metadata"] == {"hnsw:space": "cosine"}
 
 
-def test_index_descriptions_upserts_records(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_index_descriptions_upserts_records(tmp_path: Path) -> None:
     json_path = tmp_path / "descriptions.json"
     json_path.write_text(json.dumps({"a.png": "text"}), encoding="utf-8")
     collection = FakeCollection()
     chroma = FakeChroma(collection)
-    monkeypatch.setattr(
-        "pearl_engineer.index.chromadb.PersistentClient",
-        lambda **_kwargs: chroma,
-    )
     client = FakeEmbeddingClient()
 
     code = index_descriptions(
@@ -136,6 +130,7 @@ def test_index_descriptions_upserts_records(
         diagrams_dir=tmp_path,
         persist_dir=tmp_path / "chroma_db",
         client=client,
+        chroma_client=chroma,
     )
 
     assert code == 0

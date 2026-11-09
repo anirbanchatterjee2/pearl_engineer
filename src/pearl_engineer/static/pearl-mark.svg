@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 124" fill="none">
+  <!-- Pearl Filter mark: folded diamond "P" -->
+  <defs>
+    <linearGradient id="pf-facet" x1="112" y1="12" x2="20" y2="104" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4d6fd1" />
+      <stop offset="1" stop-color="#22408f" />
+    </linearGradient>
+    <linearGradient id="pf-ribbon" x1="20" y1="56" x2="40" y2="112" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7d97cc" />
+      <stop offset="1" stop-color="#5c74ac" />
+    </linearGradient>
+  </defs>
+
+  <!-- folded ribbon (the stem of the P) -->
+  <path d="M20 58 8 70l18 46 15-4-19-51Z" fill="url(#pf-ribbon)" />
+  <path d="M20 58 8 70l6 12 8-19Z" fill="#c3d2ee" />
+
+  <!-- diamond -->
+  <path d="M66 12l46 46-46 46-46-46 46-46Z" fill="url(#pf-facet)" />
+
+  <!-- inner fold highlight -->
+  <path d="M20 58l14-2-9 16-5-14Z" fill="#22408f" />
+  <path d="M66 12l46 46H66V12Z" fill="#ffffff" opacity=".08" />
+</svg>

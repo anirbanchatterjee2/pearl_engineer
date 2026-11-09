@@ -1,0 +1,6 @@
+# Optional LangGraph integration. Mirrors [project.optional-dependencies].langgraph.
+-r requirements.txt
+
+langchain-core>=0.3
+langchain-openai>=0.3
+langgraph>=0.2
